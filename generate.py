@@ -43,11 +43,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Historical background material type ('paper' or 'palm_leaf')",
     )
     parser.add_argument(
+        "--layout",
+        "-l",
+        type=str,
+        default="traditional_single",
+        choices=["traditional_single", "side_annotation", "multi_block"],
+        help="Manuscript page layout style ('traditional_single', 'side_annotation', 'multi_block')",
+    )
+    parser.add_argument(
         "--seed",
         "-s",
         type=int,
         default=None,
         help="Random seed for reproducible procedural generation",
+    )
+    parser.add_argument(
+        "--layout-seed",
+        type=int,
+        default=None,
+        help="Random seed specifically for layout variation",
+    )
+    parser.add_argument(
+        "--highlight",
+        action="store_true",
+        default=False,
+        help="Enable authentic historical pigment wash highlight on key text",
     )
     parser.add_argument(
         "--no-effects",
@@ -76,7 +96,12 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.input:
-        from src.config.settings import BackgroundConfig, EffectsConfig, PageConfig
+        from src.config.settings import (
+            BackgroundConfig,
+            EffectsConfig,
+            LayoutConfig,
+            PageConfig,
+        )
         from src.input.manuscript_loader import ManuscriptLoader
         from src.pagination.page_builder import PageBuilder
         from src.rendering.text_renderer import (
@@ -106,8 +131,18 @@ def main() -> int:
             seed=eff_seed,
         )
 
+        lay_seed = args.layout_seed if args.layout_seed is not None else args.seed
+        layout_config = LayoutConfig(
+            layout_style=args.layout,
+            highlights_enabled=args.highlight,
+            seed=lay_seed,
+        )
+
         config = PageConfig(
-            font_path=chosen_font, background=bg_config, effects=effects_config
+            font_path=chosen_font,
+            background=bg_config,
+            effects=effects_config,
+            layout=layout_config,
         )
         paginator = PageBuilder(config=config)
         pages = paginator.paginate(manuscript)

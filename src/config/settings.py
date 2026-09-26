@@ -1,4 +1,4 @@
-"""Configuration settings for page geometry, typography, procedural backgrounds, and physical effects."""
+"""Configuration settings for page geometry, typography, backgrounds, physical effects, and layout."""
 
 import math
 from dataclasses import dataclass, field
@@ -68,6 +68,30 @@ class EffectsConfig:
 
 
 @dataclass
+class LayoutConfig:
+    """Configuration settings for manuscript page layout structures."""
+
+    layout_style: str = "traditional_single"  # "traditional_single", "side_annotation", "multi_block"
+    side_text_enabled: bool = False
+    section_markers_enabled: bool = True
+    highlights_enabled: bool = False
+    layout_variation: float = 0.2
+    seed: Optional[int] = None
+    side_text_content: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        valid_styles = ("traditional_single", "side_annotation", "multi_block")
+        if self.layout_style not in valid_styles:
+            raise ValueError(
+                f"Unknown layout_style '{self.layout_style}'. Supported: {valid_styles}"
+            )
+        if not 0.0 <= self.layout_variation <= 1.0:
+            raise ValueError(
+                f"layout_variation must be between 0.0 and 1.0, got {self.layout_variation}"
+            )
+
+
+@dataclass
 class PageConfig:
     """Configurable settings for page geometry, typography, and pagination."""
 
@@ -83,6 +107,7 @@ class PageConfig:
     font_path: Optional[str] = None
     background: BackgroundConfig = field(default_factory=BackgroundConfig)
     effects: EffectsConfig = field(default_factory=EffectsConfig)
+    layout: LayoutConfig = field(default_factory=LayoutConfig)
 
     def __post_init__(self) -> None:
         if self.page_width <= 0 or self.page_height <= 0:
