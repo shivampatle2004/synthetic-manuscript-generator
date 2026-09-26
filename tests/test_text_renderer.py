@@ -113,11 +113,15 @@ def test_unicode_manuscript_text_rendering(tmp_path: Path) -> None:
 
 
 def test_background_generator_modularity() -> None:
-    """Test that create_page_background is modular and matches dimensions and color."""
+    """Test that create_page_background is modular and matches dimensions and color range."""
     renderer = ManuscriptRenderer(bg_color=(250, 245, 235))
     bg = renderer.create_page_background(800, 600)
 
     assert isinstance(bg, Image.Image)
     assert bg.size == (800, 600)
-    # Check sample pixel matches configured paper background color
-    assert bg.getpixel((10, 10)) == (250, 245, 235)
+    # Check sample pixel is close to configured paper background color
+    pixel = bg.getpixel((10, 10))
+    assert abs(pixel[0] - 250) <= 20
+    assert abs(pixel[1] - 245) <= 20
+    assert abs(pixel[2] - 235) <= 20
+

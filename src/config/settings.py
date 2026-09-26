@@ -1,8 +1,36 @@
-"""Configuration settings for page geometry, typography, and pagination."""
+"""Configuration settings for page geometry, typography, and procedural backgrounds."""
 
 import math
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Tuple
+
+
+@dataclass
+class BackgroundConfig:
+    """Configuration settings for procedural historical manuscript backgrounds."""
+
+    background_type: str = "paper"  # "paper" or "palm_leaf"
+    texture_strength: float = 0.5
+    aging_strength: float = 0.4
+    stain_strength: float = 0.3
+    edge_variation: float = 0.4
+    seed: Optional[int] = None
+    base_color: Optional[Tuple[int, int, int]] = None
+
+    def __post_init__(self) -> None:
+        valid_types = ("paper", "palm_leaf")
+        if self.background_type not in valid_types:
+            raise ValueError(
+                f"Unknown background_type '{self.background_type}'. Supported: {valid_types}"
+            )
+        for name, val in [
+            ("texture_strength", self.texture_strength),
+            ("aging_strength", self.aging_strength),
+            ("stain_strength", self.stain_strength),
+            ("edge_variation", self.edge_variation),
+        ]:
+            if not 0.0 <= val <= 2.0:
+                raise ValueError(f"{name} must be between 0.0 and 2.0, got {val}")
 
 
 @dataclass
@@ -19,6 +47,7 @@ class PageConfig:
     line_spacing: float = 1.5
     paragraph_spacing: float = 1.0
     font_path: Optional[str] = None
+    background: BackgroundConfig = field(default_factory=BackgroundConfig)
 
     def __post_init__(self) -> None:
         if self.page_width <= 0 or self.page_height <= 0:

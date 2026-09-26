@@ -34,6 +34,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to TTF/OTF/TTC font file",
     )
+    parser.add_argument(
+        "--background",
+        "-b",
+        type=str,
+        default="paper",
+        choices=["paper", "palm_leaf"],
+        help="Historical background material type ('paper' or 'palm_leaf')",
+    )
+    parser.add_argument(
+        "--seed",
+        "-s",
+        type=int,
+        default=None,
+        help="Random seed for reproducible procedural generation",
+    )
     return parser
 
 
@@ -43,7 +58,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.input:
-        from src.config.settings import PageConfig
+        from src.config.settings import BackgroundConfig, PageConfig
         from src.input.manuscript_loader import ManuscriptLoader
         from src.pagination.page_builder import PageBuilder
         from src.rendering.text_renderer import (
@@ -55,7 +70,11 @@ def main() -> int:
         manuscript = loader.load(args.input)
 
         chosen_font = args.font or find_default_indic_font()
-        config = PageConfig(font_path=chosen_font)
+        bg_config = BackgroundConfig(
+            background_type=args.background,
+            seed=args.seed,
+        )
+        config = PageConfig(font_path=chosen_font, background=bg_config)
         paginator = PageBuilder(config=config)
         pages = paginator.paginate(manuscript)
 
@@ -67,7 +86,6 @@ def main() -> int:
             print(f"Pages generated: {len(pages)}")
             print("Rendered:")
             for p in rendered_paths:
-                # Format with forward slashes for clean portable terminal output
                 clean_path = str(p).replace("\\", "/")
                 print(f"  {clean_path}")
             return 0

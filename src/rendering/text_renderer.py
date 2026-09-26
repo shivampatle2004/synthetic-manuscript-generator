@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple, Union
 
 from PIL import Image, ImageDraw, ImageFont
 
+from src.background.background_generator import BackgroundGenerator
 from src.config.settings import PageConfig
 from src.pagination.page_builder import PageContent
 
@@ -38,18 +39,27 @@ def find_default_indic_font() -> Optional[str]:
 
 
 class ManuscriptRenderer:
-    """Renders paginated manuscript pages to PNG images with paper background and ink typography."""
+    """Renders paginated manuscript pages to PNG images with authentic backgrounds and typography."""
 
     def __init__(
         self,
         config: Optional[PageConfig] = None,
         font_path: Optional[Union[str, Path]] = None,
-        bg_color: Tuple[int, int, int] = (248, 244, 232),  # Warm off-white parchment
-        text_color: Tuple[int, int, int] = (42, 32, 24),    # Dark historic brown-black ink
+        background_generator: Optional[BackgroundGenerator] = None,
+        bg_color: Optional[Tuple[int, int, int]] = None,
+        text_color: Tuple[int, int, int] = (42, 32, 24),  # Dark historic brown-black ink
     ) -> None:
         self.config = config or PageConfig()
-        self.bg_color = bg_color
         self.text_color = text_color
+
+        if bg_color is not None:
+            self.config.background.base_color = bg_color
+
+        self.background_generator = background_generator or BackgroundGenerator(
+            config=self.config.background,
+            width=self.config.page_width,
+            height=self.config.page_height,
+        )
 
         # Resolve font path priority: explicit parameter -> config -> auto-discovered
         candidate_font = font_path if font_path is not None else self.config.font_path
@@ -90,13 +100,20 @@ class ManuscriptRenderer:
         base_height = max(char_height, self.config.font_size)
         return max(1, int(math.ceil(base_height * self.config.line_spacing)))
 
-    def create_page_background(self, width: int, height: int) -> Image.Image:
-        """Create basic manuscript page canvas.
+    def create_page_background(
+        self, width: int, height: int, page_number: int = 1
+    ) -> Image.Image:
+        """Create manuscript page canvas via BackgroundGenerator.
 
-        Kept separate from text drawing so that future stages can replace or
-        enhance this with realistic historical background textures.
+        If a random seed is configured, derives a stable per-page seed
+        so that multi-page documents exhibit natural variations across leaves
+        while remaining 100% reproducible.
         """
-        return Image.new("RGB", (width, height), color=self.bg_color)
+        base_seed = self.config.background.seed
+        page_seed = (base_seed + page_number) if base_seed is not None else None
+        return self.background_generator.generate(
+            width=width, height=height, seed=page_seed
+        )
 
     def render_page(self, page: PageContent, output_path: Union[str, Path]) -> Path:
         """Render a single PageContent object into a PNG file.
@@ -109,7 +126,11 @@ class ManuscriptRenderer:
         out_file = Path(output_path)
         out_file.parent.mkdir(parents=True, exist_ok=True)
 
-        img = self.create_page_background(self.config.page_width, self.config.page_height)
+        img = self.create_page_background(
+            self.config.page_width,
+            self.config.page_height,
+            page_number=page.page_number,
+        )
         draw = ImageDraw.Draw(img)
 
         margin_left = self.config.margin_left
