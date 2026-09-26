@@ -1,4 +1,4 @@
-"""Basic manuscript page image renderer for converting PageContent to PNG."""
+"""Manuscript page image renderer for converting PageContent to PNG with typography and effects."""
 
 import math
 from pathlib import Path
@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from src.background.background_generator import BackgroundGenerator
 from src.config.settings import PageConfig
+from src.effects.manuscript_effects import ManuscriptEffects
 from src.pagination.page_builder import PageContent
 
 
@@ -39,13 +40,14 @@ def find_default_indic_font() -> Optional[str]:
 
 
 class ManuscriptRenderer:
-    """Renders paginated manuscript pages to PNG images with authentic backgrounds and typography."""
+    """Renders paginated manuscript pages to PNG images with authentic backgrounds, typography, and physical effects."""
 
     def __init__(
         self,
         config: Optional[PageConfig] = None,
         font_path: Optional[Union[str, Path]] = None,
         background_generator: Optional[BackgroundGenerator] = None,
+        effects: Optional[ManuscriptEffects] = None,
         bg_color: Optional[Tuple[int, int, int]] = None,
         text_color: Tuple[int, int, int] = (42, 32, 24),  # Dark historic brown-black ink
     ) -> None:
@@ -60,6 +62,8 @@ class ManuscriptRenderer:
             width=self.config.page_width,
             height=self.config.page_height,
         )
+
+        self.effects = effects or ManuscriptEffects(config=self.config.effects)
 
         # Resolve font path priority: explicit parameter -> config -> auto-discovered
         candidate_font = font_path if font_path is not None else self.config.font_path
@@ -121,11 +125,13 @@ class ManuscriptRenderer:
         Verifies that:
         - Image dimensions match page_width x page_height.
         - Text is positioned inside the configured margins.
+        - Physical effects are applied after text rendering.
         - Output directory is created if needed.
         """
         out_file = Path(output_path)
         out_file.parent.mkdir(parents=True, exist_ok=True)
 
+        # 1. Base historical background
         img = self.create_page_background(
             self.config.page_width,
             self.config.page_height,
@@ -133,6 +139,7 @@ class ManuscriptRenderer:
         )
         draw = ImageDraw.Draw(img)
 
+        # 2. Typography rendering
         margin_left = self.config.margin_left
         margin_top = self.config.margin_top
         max_y = self.config.page_height - self.config.margin_bottom
@@ -163,6 +170,14 @@ class ManuscriptRenderer:
                         font=self.font,
                     )
                 current_y += self.line_height
+
+        # 3. Physical manuscript effects (folds, ink bleed, fading, warp)
+        if self.effects and self.config.effects.enabled:
+            base_seed = self.config.effects.seed
+            effect_seed = (
+                (base_seed + page.page_number) if base_seed is not None else None
+            )
+            img = self.effects.apply(img, seed=effect_seed)
 
         img.save(out_file, format="PNG")
         return out_file

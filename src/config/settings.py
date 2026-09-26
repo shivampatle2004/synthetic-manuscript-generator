@@ -1,4 +1,4 @@
-"""Configuration settings for page geometry, typography, and procedural backgrounds."""
+"""Configuration settings for page geometry, typography, procedural backgrounds, and physical effects."""
 
 import math
 from dataclasses import dataclass, field
@@ -34,6 +34,40 @@ class BackgroundConfig:
 
 
 @dataclass
+class EffectsConfig:
+    """Configuration settings for physical manuscript imperfections and artifacts."""
+
+    enabled: bool = True
+    enable_warp: bool = True
+    warp_strength: float = 0.3
+    enable_folds: bool = True
+    fold_strength: float = 0.3
+    fold_count: int = 1
+    enable_ink_bleed: bool = True
+    ink_bleed_strength: float = 0.3
+    enable_fade: bool = True
+    fade_strength: float = 0.3
+    enable_smudge: bool = True
+    smudge_strength: float = 0.2
+    edge_wear_strength: float = 0.3
+    seed: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if self.fold_count < 0:
+            raise ValueError(f"fold_count cannot be negative, got {self.fold_count}")
+        for name, val in [
+            ("warp_strength", self.warp_strength),
+            ("fold_strength", self.fold_strength),
+            ("ink_bleed_strength", self.ink_bleed_strength),
+            ("fade_strength", self.fade_strength),
+            ("smudge_strength", self.smudge_strength),
+            ("edge_wear_strength", self.edge_wear_strength),
+        ]:
+            if not 0.0 <= val <= 2.0:
+                raise ValueError(f"{name} must be between 0.0 and 2.0, got {val}")
+
+
+@dataclass
 class PageConfig:
     """Configurable settings for page geometry, typography, and pagination."""
 
@@ -48,6 +82,7 @@ class PageConfig:
     paragraph_spacing: float = 1.0
     font_path: Optional[str] = None
     background: BackgroundConfig = field(default_factory=BackgroundConfig)
+    effects: EffectsConfig = field(default_factory=EffectsConfig)
 
     def __post_init__(self) -> None:
         if self.page_width <= 0 or self.page_height <= 0:

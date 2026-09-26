@@ -1,5 +1,5 @@
 """Configuration module for manuscript generation pipeline."""
 
-from src.config.settings import BackgroundConfig, PageConfig
+from src.config.settings import BackgroundConfig, EffectsConfig, PageConfig
 
-__all__ = ["BackgroundConfig", "PageConfig"]
+__all__ = ["BackgroundConfig", "EffectsConfig", "PageConfig"]

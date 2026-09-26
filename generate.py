@@ -49,6 +49,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Random seed for reproducible procedural generation",
     )
+    parser.add_argument(
+        "--no-effects",
+        action="store_true",
+        default=False,
+        help="Disable physical manuscript effects (warp, folds, ink bleed, fade)",
+    )
+    parser.add_argument(
+        "--effects-strength",
+        type=float,
+        default=0.3,
+        help="Intensity scaling for physical manuscript effects (default: 0.3)",
+    )
+    parser.add_argument(
+        "--effects-seed",
+        type=int,
+        default=None,
+        help="Random seed specifically for physical effects layer",
+    )
     return parser
 
 
@@ -58,7 +76,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.input:
-        from src.config.settings import BackgroundConfig, PageConfig
+        from src.config.settings import BackgroundConfig, EffectsConfig, PageConfig
         from src.input.manuscript_loader import ManuscriptLoader
         from src.pagination.page_builder import PageBuilder
         from src.rendering.text_renderer import (
@@ -74,7 +92,23 @@ def main() -> int:
             background_type=args.background,
             seed=args.seed,
         )
-        config = PageConfig(font_path=chosen_font, background=bg_config)
+
+        eff_seed = args.effects_seed if args.effects_seed is not None else args.seed
+        strength = max(0.0, min(2.0, args.effects_strength))
+        effects_config = EffectsConfig(
+            enabled=not args.no_effects,
+            warp_strength=strength,
+            fold_strength=strength,
+            ink_bleed_strength=strength,
+            fade_strength=strength,
+            smudge_strength=min(0.5, strength * 0.7),
+            edge_wear_strength=strength,
+            seed=eff_seed,
+        )
+
+        config = PageConfig(
+            font_path=chosen_font, background=bg_config, effects=effects_config
+        )
         paginator = PageBuilder(config=config)
         pages = paginator.paginate(manuscript)
 
