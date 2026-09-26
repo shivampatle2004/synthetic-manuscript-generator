@@ -105,6 +105,7 @@ class PageConfig:
     line_spacing: float = 1.5
     paragraph_spacing: float = 1.0
     font_path: Optional[str] = None
+    script: str = "Devanagari"
     background: BackgroundConfig = field(default_factory=BackgroundConfig)
     effects: EffectsConfig = field(default_factory=EffectsConfig)
     layout: LayoutConfig = field(default_factory=LayoutConfig)

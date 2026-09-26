@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-o",
         type=str,
         default=None,
-        help="Output directory for rendered PNG page images",
+        help="Output directory for rendered PNG page images and ground-truth MD annotations",
     )
     parser.add_argument(
         "--font",
@@ -49,6 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="traditional_single",
         choices=["traditional_single", "side_annotation", "multi_block"],
         help="Manuscript page layout style ('traditional_single', 'side_annotation', 'multi_block')",
+    )
+    parser.add_argument(
+        "--script",
+        type=str,
+        default="Devanagari",
+        help="Target manuscript script (e.g. Devanagari, Modi, Sharada)",
     )
     parser.add_argument(
         "--seed",
@@ -96,6 +102,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.input:
+        from src.annotation.annotation_generator import AnnotationGenerator
         from src.config.settings import (
             BackgroundConfig,
             EffectsConfig,
@@ -103,6 +110,7 @@ def main() -> int:
             PageConfig,
         )
         from src.input.manuscript_loader import ManuscriptLoader
+        from src.layout.layout_engine import LayoutEngine
         from src.pagination.page_builder import PageBuilder
         from src.rendering.text_renderer import (
             ManuscriptRenderer,
@@ -140,6 +148,7 @@ def main() -> int:
 
         config = PageConfig(
             font_path=chosen_font,
+            script=args.script,
             background=bg_config,
             effects=effects_config,
             layout=layout_config,
@@ -148,14 +157,47 @@ def main() -> int:
         pages = paginator.paginate(manuscript)
 
         if args.output:
-            renderer = ManuscriptRenderer(config=config, font_path=chosen_font)
-            rendered_paths = renderer.render_pages(pages, output_dir=args.output)
+            out_dir = Path(args.output)
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            layout_engine = LayoutEngine(config=config.layout)
+            renderer = ManuscriptRenderer(
+                config=config, font_path=chosen_font, layout_engine=layout_engine
+            )
+            annotation_gen = AnnotationGenerator(
+                script=args.script, layout_style=args.layout
+            )
+
+            rendered_items: list[Path] = []
+            for page in pages:
+                # 1. Build synchronized LayoutPage
+                lpage = layout_engine.build_layout(page, config.layout, config)
+
+                img_name = f"Image_{lpage.page_number:03d}.png"
+                md_name = f"Image_{lpage.page_number:03d}.md"
+
+                img_path = out_dir / img_name
+                md_path = out_dir / md_name
+
+                # 2. Render PNG from LayoutPage
+                renderer.render_layout_page(lpage, img_path)
+                rendered_items.append(img_path)
+
+                # 3. Generate ground-truth MD from identical LayoutPage
+                annotation_gen.generate_annotation(
+                    lpage,
+                    output_path=md_path,
+                    image_filename=img_name,
+                    script=args.script,
+                    layout_style=args.layout,
+                )
+                rendered_items.append(md_path)
 
             print(f"Loaded manuscript: {args.input}")
             print(f"Pages generated: {len(pages)}")
             print("Rendered:")
-            for p in rendered_paths:
-                clean_path = str(p).replace("\\", "/")
+            for item in rendered_items:
+                clean_path = str(item).replace("\\", "/")
                 print(f"  {clean_path}")
             return 0
 
