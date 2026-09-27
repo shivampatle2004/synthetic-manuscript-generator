@@ -13,6 +13,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Synthetic Manuscript Generator CLI Orchestrator"
     )
+    # Single Manuscript Generation Options
     parser.add_argument(
         "--input",
         "-i",
@@ -93,6 +94,92 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Random seed specifically for physical effects layer",
     )
+
+    # Multi-Script Dataset Generation Options
+    parser.add_argument(
+        "--dataset",
+        action="store_true",
+        default=False,
+        help="Run in multi-script dataset generation mode",
+    )
+    parser.add_argument(
+        "--dataset-output",
+        type=str,
+        default="dataset",
+        help="Output root directory for generated dataset (default: 'dataset')",
+    )
+    parser.add_argument(
+        "--dataset-seed",
+        type=int,
+        default=42,
+        help="Master seed for reproducible dataset generation (default: 42)",
+    )
+    parser.add_argument(
+        "--samples-per-script",
+        type=int,
+        default=100,
+        help="Number of samples to generate per script (default: 100)",
+    )
+    parser.add_argument(
+        "--scripts",
+        type=str,
+        default="Devanagari,Modi,Sharada",
+        help="Comma-separated list of scripts to generate (default: 'Devanagari,Modi,Sharada')",
+    )
+    parser.add_argument(
+        "--train-count",
+        type=int,
+        default=None,
+        help="Explicit sample count for train split",
+    )
+    parser.add_argument(
+        "--validation-count",
+        type=int,
+        default=None,
+        help="Explicit sample count for validation split",
+    )
+    parser.add_argument(
+        "--test-count",
+        type=int,
+        default=None,
+        help="Explicit sample count for test split",
+    )
+    parser.add_argument(
+        "--devanagari-font",
+        type=str,
+        default=None,
+        help="Custom font path for Devanagari script",
+    )
+    parser.add_argument(
+        "--modi-font",
+        type=str,
+        default=None,
+        help="Custom font path for Modi script",
+    )
+    parser.add_argument(
+        "--sharada-font",
+        type=str,
+        default=None,
+        help="Custom font path for Sharada script",
+    )
+    parser.add_argument(
+        "--devanagari-input",
+        type=str,
+        default=None,
+        help="Custom manuscript input path for Devanagari script",
+    )
+    parser.add_argument(
+        "--modi-input",
+        type=str,
+        default=None,
+        help="Custom manuscript input path for Modi script",
+    )
+    parser.add_argument(
+        "--sharada-input",
+        type=str,
+        default=None,
+        help="Custom manuscript input path for Sharada script",
+    )
     return parser
 
 
@@ -101,6 +188,73 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
+    # 1. Dataset Generation Mode
+    if args.dataset:
+        from src.config.script_config import DatasetConfig, ScriptConfig
+        from src.dataset.dataset_builder import DatasetBuilder
+
+        total_s = args.samples_per_script
+        if (
+            args.train_count is not None
+            and args.validation_count is not None
+            and args.test_count is not None
+        ):
+            tr, va, te = args.train_count, args.validation_count, args.test_count
+        elif total_s == 100:
+            tr, va, te = 85, 10, 5
+        elif total_s == 3:
+            tr, va, te = 1, 1, 1
+        else:
+            tr = int(round(total_s * 0.85))
+            va = int(round(total_s * 0.10))
+            te = total_s - tr - va
+            if te < 0:
+                te = 0
+                tr = total_s - va
+
+        requested_scripts = [
+            s.strip() for s in args.scripts.split(",") if s.strip()
+        ]
+        script_configs = []
+        for sname in requested_scripts:
+            font_p = None
+            input_p = None
+            s_low = sname.lower()
+            if s_low == "devanagari":
+                font_p = args.devanagari_font
+                input_p = args.devanagari_input or "input/devanagari.md"
+            elif s_low == "modi":
+                font_p = args.modi_font
+                input_p = args.modi_input or "input/modi.md"
+            elif s_low == "sharada":
+                font_p = args.sharada_font
+                input_p = args.sharada_input or "input/sharada.md"
+
+            script_configs.append(
+                ScriptConfig(
+                    name=sname,
+                    font_path=font_p,
+                    input_path=input_p,
+                    enabled=True,
+                )
+            )
+
+        dataset_config = DatasetConfig(
+            samples_per_script=total_s,
+            train_count=tr,
+            validation_count=va,
+            test_count=te,
+            scripts=script_configs,
+            output_dir=args.dataset_output,
+            seed=args.dataset_seed,
+        )
+
+        builder = DatasetBuilder(config=dataset_config)
+        summary = builder.build()
+        print(summary.format_summary())
+        return 0
+
+    # 2. Single Manuscript Generation Mode
     if args.input:
         from src.annotation.annotation_generator import AnnotationGenerator
         from src.config.settings import (

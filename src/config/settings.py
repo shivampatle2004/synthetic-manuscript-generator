@@ -2,7 +2,15 @@
 
 import math
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
+
+from src.config.script_config import (
+    DatasetConfig,
+    ScriptConfig,
+    get_default_scripts,
+    resolve_script_font,
+    resolve_script_input,
+)
 
 
 @dataclass

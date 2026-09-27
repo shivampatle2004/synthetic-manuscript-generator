@@ -36,9 +36,10 @@ ENV/
 .coverage
 htmlcov/
 
-# Output directory contents (preserve folder structure)
+# Output and dataset directory contents
 output/*
 !output/.gitkeep
+/dataset/
 
 # IDEs and OS files
 .vscode/
