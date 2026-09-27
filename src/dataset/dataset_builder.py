@@ -114,7 +114,9 @@ class DatasetBuilder:
                 script=script.name,
             )
             paginator = PageBuilder(config=base_page_config)
-            base_pages = paginator.paginate(manuscript)
+            base_pages = paginator.paginate(
+                manuscript, max_pages=self.config.samples_per_script
+            )
 
             if not base_pages:
                 summary.missing_scripts[script.name] = (
@@ -175,6 +177,8 @@ class DatasetBuilder:
                         fade_strength=round(sample_rng.uniform(0.15, 0.4), 2),
                         smudge_strength=round(sample_rng.uniform(0.1, 0.25), 2),
                         edge_wear_strength=round(sample_rng.uniform(0.2, 0.4), 2),
+                        enable_scribal_variation=True,
+                        scribal_variation_strength=round(sample_rng.uniform(0.4, 0.8), 2),
                         seed=eff_seed,
                     )
 

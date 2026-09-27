@@ -121,7 +121,9 @@ class PageBuilder:
             lines.extend(wrapped)
         return lines
 
-    def paginate(self, manuscript: Manuscript) -> List[PageContent]:
+    def paginate(
+        self, manuscript: Manuscript, max_pages: Optional[int] = None
+    ) -> List[PageContent]:
         """Paginate a manuscript into structured PageContent objects.
 
         Pagination is strictly driven by geometry and typography:
@@ -130,6 +132,7 @@ class PageBuilder:
         - Lines are accumulated until usable page height is reached.
         - Paragraph spacing is preserved where geometry permits.
         - No text or words are dropped across pages.
+        - Optional max_pages stops early to avoid unnecessary processing on massive corpora.
         """
         if not manuscript.paragraphs:
             return []
@@ -172,9 +175,8 @@ class PageBuilder:
             current_height = 0
 
         for para in manuscript.paragraphs:
-            wrapped_lines = self.wrap_paragraph(para, usable_w)
-            if not wrapped_lines:
-                continue
+            if max_pages is not None and len(pages) >= max_pages:
+                break
 
             # If there are already lines on the page, account for paragraph spacing
             if current_page_lines:
@@ -186,20 +188,31 @@ class PageBuilder:
                 else:
                     # Not enough room for paragraph gap + at least one line; advance page
                     flush_page()
+                    if max_pages is not None and len(pages) >= max_pages:
+                        break
 
-            for line in wrapped_lines:
-                if current_height + line_h > usable_h and current_page_lines:
-                    flush_page()
+            # Wrap line by line so massive paragraphs break early without measuring entire file
+            for raw_line in para.splitlines():
+                if max_pages is not None and len(pages) >= max_pages:
+                    break
+                wrapped_lines = self.wrap_line(raw_line, usable_w)
+                for line in wrapped_lines:
+                    if current_height + line_h > usable_h and current_page_lines:
+                        flush_page()
+                        if max_pages is not None and len(pages) >= max_pages:
+                            break
 
-                current_page_lines.append(line)
-                current_para_lines.append(line)
-                current_height += line_h
+                    current_page_lines.append(line)
+                    current_para_lines.append(line)
+                    current_height += line_h
 
             if current_para_lines:
                 current_page_paragraphs.append(list(current_para_lines))
                 current_para_lines = []
 
-        if current_page_lines:
+        if current_page_lines and (max_pages is None or len(pages) < max_pages):
             flush_page()
 
+        if max_pages is not None:
+            return pages[:max_pages]
         return pages

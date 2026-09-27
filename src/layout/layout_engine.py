@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 from src.config.settings import LayoutConfig, PageConfig
-from src.pagination.page_builder import PageContent
+from src.pagination.page_builder import PageBuilder, PageContent
 
 
 @dataclass
@@ -207,36 +207,87 @@ class LayoutEngine:
         side_w = usable_w - main_w - gutter
         side_x = margin_l + main_w + gutter
 
-        line_h = int(math.ceil(p_cfg.font_size * p_cfg.line_spacing))
-        main_h = min(usable_h, len(page.lines) * line_h + 10)
+        # Re-wrap main text strictly to main_w and adapt font size so no lines are clipped vertically
+        main_font_size = p_cfg.font_size
+        line_h = int(math.ceil(main_font_size * p_cfg.line_spacing))
+        rewrapped_main_lines: List[str] = []
+
+        while main_font_size >= 14:
+            builder = PageBuilder(
+                PageConfig(
+                    font_path=p_cfg.font_path,
+                    font_size=main_font_size,
+                    line_spacing=p_cfg.line_spacing,
+                )
+            )
+            candidate_lines: List[str] = []
+            for line in page.lines:
+                candidate_lines.extend(builder.wrap_line(line, main_w))
+
+            calc_line_h = int(math.ceil(main_font_size * p_cfg.line_spacing))
+            total_h = len(candidate_lines) * calc_line_h
+            if total_h <= usable_h:
+                rewrapped_main_lines = candidate_lines
+                line_h = calc_line_h
+                break
+            main_font_size -= 1
+        else:
+            builder = PageBuilder(
+                PageConfig(
+                    font_path=p_cfg.font_path,
+                    font_size=14,
+                    line_spacing=p_cfg.line_spacing,
+                )
+            )
+            rewrapped_main_lines = []
+            for line in page.lines:
+                rewrapped_main_lines.extend(builder.wrap_line(line, main_w))
+            line_h = int(math.ceil(14 * p_cfg.line_spacing))
+            main_font_size = 14
+
+        main_h = min(usable_h, len(rewrapped_main_lines) * line_h + 10)
 
         main_block = TextBlock(
             block_id=f"page_{page.page_number}_main",
             text=page.text,
-            lines=list(page.lines),
+            lines=rewrapped_main_lines,
             x=margin_l,
             y=margin_t,
             width=main_w,
             height=main_h,
             role="main_text",
-            font_size=p_cfg.font_size,
+            font_size=main_font_size,
             line_height=line_h,
         )
 
         # Side commentary / gloss lines
-        side_lines = (
-            cfg.side_text_content.splitlines()
-            if cfg.side_text_content
-            else ["॥ टीका ॥", "अत्र श्लोके", "पदच्छेदः", "अन्वयार्थः च ।"]
-        )
+        if cfg.side_text_content:
+            side_lines = cfg.side_text_content.splitlines()
+        elif p_cfg.script == "Modi":
+            side_lines = ["𑘘𑘲𑘎𑘰", "𑘧𑘹𑘞𑘹 𑘫𑘿𑘩𑘻𑘎𑘰𑘨𑘿𑘞", "𑘢𑘟𑘔𑘹𑘟", "𑘀𑘡𑘿𑘪𑘧𑘰𑘨𑘿𑘞 𑘓"]
+        elif p_cfg.script == "Sharada":
+            side_lines = ["𑆛𑆵𑆑𑆳", "𑆃𑆠𑇀𑆫 𑆯𑇀𑆬𑆾𑆑𑆼", "𑆥𑆢𑆖𑇀𑆗𑆼𑆢𑆂", "𑆃𑆤𑇀𑆮𑆪𑆳𑆫𑇀𑆡𑆂 𑆖 𑇅"]
+        else:
+            side_lines = ["॥ टीका ॥", "अत्र श्लोके", "पदच्छेदः", "अन्वयार्थः च ।"]
         side_font_size = max(12, int(p_cfg.font_size * 0.65))
         side_line_h = int(math.ceil(side_font_size * 1.4))
-        side_h = min(usable_h, len(side_lines) * side_line_h + 10)
+
+        side_builder = PageBuilder(
+            PageConfig(
+                font_path=p_cfg.font_path,
+                font_size=side_font_size,
+                line_spacing=1.4,
+            )
+        )
+        rewrapped_side_lines: List[str] = []
+        for sline in side_lines:
+            rewrapped_side_lines.extend(side_builder.wrap_line(sline, side_w))
+        side_h = min(usable_h, len(rewrapped_side_lines) * side_line_h + 10)
 
         side_block = TextBlock(
             block_id=f"page_{page.page_number}_side",
-            text="\n".join(side_lines),
-            lines=side_lines,
+            text="\n".join(rewrapped_side_lines),
+            lines=rewrapped_side_lines,
             x=side_x,
             y=margin_t + 10,
             width=side_w,

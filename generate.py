@@ -94,6 +94,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Random seed specifically for physical effects layer",
     )
+    parser.add_argument(
+        "--scribal-variation",
+        action="store_true",
+        default=False,
+        help="Enable subtle organic scribal line jitter and baseline undulation",
+    )
+    parser.add_argument(
+        "--scribal-strength",
+        type=float,
+        default=0.6,
+        help="Intensity scaling for scribal line variation (default: 0.6)",
+    )
 
     # Multi-Script Dataset Generation Options
     parser.add_argument(
@@ -290,6 +302,8 @@ def main() -> int:
             fade_strength=strength,
             smudge_strength=min(0.5, strength * 0.7),
             edge_wear_strength=strength,
+            enable_scribal_variation=args.scribal_variation,
+            scribal_variation_strength=max(0.0, min(2.0, args.scribal_strength)),
             seed=eff_seed,
         )
 

@@ -4,6 +4,8 @@ import math
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
+import scipy.ndimage
 from PIL import Image, ImageDraw, ImageFont
 
 from src.background.background_generator import BackgroundGenerator
@@ -152,6 +154,84 @@ class ManuscriptRenderer:
                 fill=color,
             )
 
+    def _render_line(
+        self,
+        img: Image.Image,
+        line: str,
+        x: int,
+        y: int,
+        font: ImageFont.ImageFont,
+        rng: Optional[np.random.Generator] = None,
+        strength: float = 0.0,
+    ) -> None:
+        """Render a single line of text with optional subtle organic scribal variation."""
+        if not line or not line.strip():
+            return
+
+        # If scribal variation is disabled or zero strength, render directly and fast
+        if rng is None or strength <= 0.0:
+            draw = ImageDraw.Draw(img)
+            draw.text((x, y), line, fill=self.text_color, font=font)
+            return
+
+        bbox = font.getbbox(line)
+        if not bbox or bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
+            draw = ImageDraw.Draw(img)
+            draw.text((x, y), line, fill=self.text_color, font=font)
+            return
+
+        # 1. Subtle line-start horizontal jitter: approximately +/- 1-3 px
+        dx = float(rng.uniform(-2.0, 2.0) * strength)
+        # 2. Very subtle baseline variation: approximately +/- 1-2 px
+        dy = float(rng.uniform(-1.2, 1.2) * strength)
+
+        # 3. Slight smooth/organic baseline drift across line
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        pad = 12
+
+        strip_w = w + 2 * pad
+        strip_h = h + 2 * pad
+
+        strip = Image.new("RGBA", (strip_w, strip_h), (0, 0, 0, 0))
+        d_strip = ImageDraw.Draw(strip)
+        d_strip.text(
+            (pad - bbox[0], pad - bbox[1]),
+            line,
+            fill=(*self.text_color, 255),
+            font=font,
+        )
+
+        alpha = np.array(strip)[:, :, 3].astype(np.float32)
+        H_s, W_s = alpha.shape
+
+        # Organic undulation wave parameters across folio line
+        tilt = float(rng.uniform(-0.8, 0.8) * strength)
+        amplitude = float(rng.uniform(-0.8, 0.8) * strength)
+        freq = float(rng.uniform(0.8, 1.6))
+        phase = float(rng.uniform(0, 2 * math.pi))
+
+        x_rel = (np.arange(W_s, dtype=np.float32) - pad) / max(1.0, float(w))
+        drift = tilt * (x_rel - 0.5) + amplitude * np.sin(
+            2.0 * math.pi * freq * x_rel + phase
+        )
+
+        y_coords, x_coords = np.mgrid[0:H_s, 0:W_s]
+        y_shifted = y_coords - drift[None, :]
+
+        shifted_alpha = scipy.ndimage.map_coordinates(
+            alpha, [y_shifted, x_coords], order=1, mode="constant", cval=0.0
+        )
+
+        out_strip_arr = np.zeros((H_s, W_s, 4), dtype=np.uint8)
+        out_strip_arr[:, :, :3] = self.text_color
+        out_strip_arr[:, :, 3] = np.clip(shifted_alpha, 0, 255).astype(np.uint8)
+        out_strip = Image.fromarray(out_strip_arr, mode="RGBA")
+
+        paste_x = int(round(x + bbox[0] - pad + dx))
+        paste_y = int(round(y + bbox[1] - pad + dy))
+        img.paste(out_strip, (paste_x, paste_y), out_strip)
+
     def render_layout_page(
         self, layout_page: LayoutPage, output_path: Union[str, Path]
     ) -> Path:
@@ -182,6 +262,28 @@ class ManuscriptRenderer:
         for marker in layout_page.markers:
             self._render_section_marker(draw, marker)
 
+        # Determine scribal variation settings and deterministic RNG
+        scribal_enabled = (
+            self.config.effects.enable_scribal_variation
+            and self.config.effects.scribal_variation_strength > 0
+        )
+        base_seed = self.config.effects.seed
+        page_seed = (
+            (base_seed + layout_page.page_number)
+            if base_seed is not None
+            else (layout_page.page_number * 10007)
+        )
+        scribal_rng = (
+            np.random.default_rng(page_seed)
+            if scribal_enabled
+            else None
+        )
+        scribal_strength = (
+            self.config.effects.scribal_variation_strength
+            if scribal_enabled
+            else 0.0
+        )
+
         # 3. Render text blocks
         for block in layout_page.blocks:
             b_size = block.font_size or self.config.font_size
@@ -194,7 +296,15 @@ class ManuscriptRenderer:
 
             current_y = block.y
             for line in block.lines:
-                draw.text((block.x, current_y), line, fill=self.text_color, font=b_font)
+                self._render_line(
+                    img=img,
+                    line=line,
+                    x=block.x,
+                    y=current_y,
+                    font=b_font,
+                    rng=scribal_rng,
+                    strength=scribal_strength,
+                )
                 current_y += b_line_h
 
         # 4. Physical manuscript effects

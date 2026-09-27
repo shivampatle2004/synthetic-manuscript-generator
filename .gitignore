@@ -40,6 +40,7 @@ htmlcov/
 output/*
 !output/.gitkeep
 /dataset/
+GIVEN DATA_SET/
 
 # IDEs and OS files
 .vscode/

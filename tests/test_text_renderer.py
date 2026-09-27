@@ -1,10 +1,11 @@
 """Unit tests for ManuscriptRenderer and text rendering pipeline."""
 
 from pathlib import Path
+import numpy as np
 import pytest
 from PIL import Image
 
-from src.config.settings import PageConfig
+from src.config.settings import BackgroundConfig, EffectsConfig, PageConfig
 from src.pagination.page_builder import PageContent
 from src.rendering.text_renderer import ManuscriptRenderer, find_default_indic_font
 
@@ -124,4 +125,88 @@ def test_background_generator_modularity() -> None:
     assert abs(pixel[0] - 250) <= 20
     assert abs(pixel[1] - 245) <= 20
     assert abs(pixel[2] - 235) <= 20
+
+
+def test_scribal_variation_deterministic(tmp_path: Path) -> None:
+    """Test that scribal line variation is 100% deterministic when seed is fixed."""
+    text = "धर्मक्षेत्रे कुरुक्षेत्रे समवेता युयुत्सवः ।\nमामकाः पाण्डवाश्चैव किमकुर्वत सञ्जय ॥"
+    page = create_sample_page(page_number=1, text=text)
+
+    cfg = PageConfig(
+        background=BackgroundConfig(seed=42, texture_strength=0.0, aging_strength=0.0, stain_strength=0.0),
+        effects=EffectsConfig(enabled=False, enable_scribal_variation=True, scribal_variation_strength=0.8, seed=100),
+    )
+
+    renderer1 = ManuscriptRenderer(config=cfg)
+    target1 = tmp_path / "scribal_1.png"
+    renderer1.render_page(page, target1)
+
+    renderer2 = ManuscriptRenderer(config=cfg)
+    target2 = tmp_path / "scribal_2.png"
+    renderer2.render_page(page, target2)
+
+    arr1 = np.array(Image.open(target1))
+    arr2 = np.array(Image.open(target2))
+    assert np.array_equal(arr1, arr2), "Scribal variation was not deterministic across identical seeds!"
+
+
+def test_scribal_variation_zero_or_disabled(tmp_path: Path) -> None:
+    """Test that disabled scribal variation or zero strength produces standard straight rendering."""
+    text = "धर्मक्षेत्रे कुरुक्षेत्रे समवेता युयुत्सवः ।\nमामकाः पाण्डवाश्चैव किमकुर्वत सञ्जय ॥"
+    page = create_sample_page(page_number=1, text=text)
+
+    cfg_disabled = PageConfig(
+        background=BackgroundConfig(seed=42, texture_strength=0.0, aging_strength=0.0, stain_strength=0.0),
+        effects=EffectsConfig(enabled=False, enable_scribal_variation=False, scribal_variation_strength=0.0),
+    )
+    renderer_disabled = ManuscriptRenderer(config=cfg_disabled)
+    target_disabled = tmp_path / "disabled.png"
+    renderer_disabled.render_page(page, target_disabled)
+
+    cfg_zero_str = PageConfig(
+        background=BackgroundConfig(seed=42, texture_strength=0.0, aging_strength=0.0, stain_strength=0.0),
+        effects=EffectsConfig(enabled=False, enable_scribal_variation=True, scribal_variation_strength=0.0),
+    )
+    renderer_zero_str = ManuscriptRenderer(config=cfg_zero_str)
+    target_zero_str = tmp_path / "zero_str.png"
+    renderer_zero_str.render_page(page, target_zero_str)
+
+    arr1 = np.array(Image.open(target_disabled))
+    arr2 = np.array(Image.open(target_zero_str))
+    assert np.array_equal(arr1, arr2), "Zero strength did not match disabled scribal variation!"
+
+
+def test_scribal_variation_preserves_dimensions_and_shifts_organically(tmp_path: Path) -> None:
+    """Test that scribal variation preserves page canvas dimensions while subtly undulating text strokes."""
+    text = "धर्मक्षेत्रे कुरुक्षेत्रे समवेता युयुत्सवः ।\nमामकाः पाण्डवाश्चैव किमकुर्वत सञ्जय ॥"
+    page = create_sample_page(page_number=1, text=text)
+
+    cfg_straight = PageConfig(
+        background=BackgroundConfig(seed=42, texture_strength=0.0, aging_strength=0.0, stain_strength=0.0),
+        effects=EffectsConfig(enabled=False, enable_scribal_variation=False),
+    )
+    renderer_straight = ManuscriptRenderer(config=cfg_straight)
+    target_straight = tmp_path / "straight.png"
+    renderer_straight.render_page(page, target_straight)
+
+    cfg_scribal = PageConfig(
+        background=BackgroundConfig(seed=42, texture_strength=0.0, aging_strength=0.0, stain_strength=0.0),
+        effects=EffectsConfig(enabled=False, enable_scribal_variation=True, scribal_variation_strength=0.8, seed=42),
+    )
+    renderer_scribal = ManuscriptRenderer(config=cfg_scribal)
+    target_scribal = tmp_path / "scribal.png"
+    renderer_scribal.render_page(page, target_scribal)
+
+    with Image.open(target_scribal) as img_scribal:
+        assert img_scribal.size == (cfg_scribal.page_width, cfg_scribal.page_height)
+        assert img_scribal.format == "PNG"
+
+    arr_straight = np.array(Image.open(target_straight))
+    arr_scribal = np.array(Image.open(target_scribal))
+
+    # There should be subtle organic pixel differences in the text glyphs
+    diff = np.abs(arr_straight.astype(int) - arr_scribal.astype(int))
+    diff_pixels = np.sum(diff > 0)
+    assert diff_pixels > 0, "Scribal variation produced no change compared to straight rendering!"
+
 

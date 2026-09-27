@@ -59,6 +59,8 @@ class EffectsConfig:
     smudge_strength: float = 0.2
     edge_wear_strength: float = 0.3
     seed: Optional[int] = None
+    enable_scribal_variation: bool = False
+    scribal_variation_strength: float = 0.0
 
     def __post_init__(self) -> None:
         if self.fold_count < 0:
@@ -70,6 +72,7 @@ class EffectsConfig:
             ("fade_strength", self.fade_strength),
             ("smudge_strength", self.smudge_strength),
             ("edge_wear_strength", self.edge_wear_strength),
+            ("scribal_variation_strength", self.scribal_variation_strength),
         ]:
             if not 0.0 <= val <= 2.0:
                 raise ValueError(f"{name} must be between 0.0 and 2.0, got {val}")

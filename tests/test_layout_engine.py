@@ -96,6 +96,57 @@ def test_side_annotation_layout_and_no_collision() -> None:
     assert side_block.y + side_block.height <= page_cfg.page_height
 
 
+def test_side_annotation_containment_and_no_gutter_collision() -> None:
+    """Test that wide lines in side annotation layout are re-wrapped to main column width,
+    preventing any collision with gutter rule or side annotation text."""
+    engine = LayoutEngine()
+    long_line = (
+        "धर्मक्षेत्रे कुरुक्षेत्रे समवेता युयुत्सवः मामकाः पाण्डवाश्चैव किमकुर्वत सञ्जय "
+        "दृष्ट्वा तु पाण्डवानीकं व्यूढं दुर्योधनस्तदा आचार्यमुपसङ्गम्य राजा वचनमब्रवीत्"
+    )
+    page = PageContent(
+        page_number=1,
+        text=long_line,
+        lines=[long_line],
+        paragraphs=[long_line],
+        line_count=1,
+        usable_width=1040,
+        usable_height=680,
+    )
+    cfg = LayoutConfig(layout_style="side_annotation", section_markers_enabled=True)
+    page_cfg = PageConfig()
+
+    layout = engine.build_layout(page, layout_config=cfg, page_config=page_cfg)
+
+    main_block = layout.main_text_blocks[0]
+    side_block = layout.side_text_blocks[0]
+
+    # Verify gutter separation
+    assert main_block.x + main_block.width < side_block.x
+    assert not check_collision(main_block.bounding_box, side_block.bounding_box)
+
+    # Verify lines were re-wrapped to fit within main_block.width
+    assert len(main_block.lines) > 1
+
+    # Verify every line respects the allocated main column width
+    from src.pagination.page_builder import PageBuilder
+
+    builder = PageBuilder(
+        PageConfig(font_path=page_cfg.font_path, font_size=main_block.font_size)
+    )
+    for line in main_block.lines:
+        line_w = builder.measure_text_width(line)
+        assert (
+            line_w <= main_block.width
+        ), f"Line width {line_w} exceeded column width {main_block.width}"
+
+    # Verify gutter rule marker sits cleanly between main text and side commentary
+    gutter_rules = [m for m in layout.markers if m.marker_type == "heading_rule"]
+    assert len(gutter_rules) == 1
+    rule = gutter_rules[0]
+    assert main_block.x + main_block.width <= rule.x < side_block.x
+
+
 def test_highlight_placement() -> None:
     """Test that enabling highlights marks the text block with historic pigment wash."""
     engine = LayoutEngine()
